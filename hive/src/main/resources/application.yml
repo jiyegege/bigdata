@@ -1,3 +1,12 @@
+spring:
+  datasource:
+    driver-class-name: org.apache.hive.jdbc.HiveDriver
+    url: jdbc:hive2://localhost:10000/hive_test
+    username:
+    password:
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/*.xml
 # Logger Config
 logging:
   level:

@@ -54,6 +54,7 @@ public class ControllerAdvice {
         return new ResultVo<>("A0400", String.valueOf(errorMessages), null);
     }
 
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     @ExceptionHandler(CustomException.class)
     public ResultVo<String> testExceptionHandler(CustomException e) {
         return new ResultVo<String>("B0001", "失败", e.getMsg());
