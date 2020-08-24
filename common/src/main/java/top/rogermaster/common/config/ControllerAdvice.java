@@ -25,38 +25,62 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class ControllerAdvice {
 
-    //参数检验错误 @RequestParam上validate失败后抛出的异常是javax.validation.ConstraintViolationException
+    public static final String ERROR = "Error:{}";
+    public static final String PARAMS_ERROR = "A0400";
+
+    /**
+     * 参数检验错误 @RequestParam上validate失败后抛出的异常是javax.validation.ConstraintViolationException
+     *
+     * @param e MethodArgumentNotValidException
+     * @return rest json
+     */
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     @ExceptionHandler
     public ResultVo<Object> handlerMethodArgumentNotValidException(final MethodArgumentNotValidException e) {
-        log.error("Error:", e);
+        log.error(ERROR, e);
         List<ObjectError> objectErrors = e.getBindingResult().getAllErrors();
         StringBuilder errorMessages = new StringBuilder();
         objectErrors.forEach(objectError -> errorMessages.append(objectError.getDefaultMessage()).append(";"));
-        return new ResultVo<>("A0400", String.valueOf(errorMessages), null);
+        return new ResultVo<>(PARAMS_ERROR, String.valueOf(errorMessages), null);
     }
 
-    //参数检验错误 @RequestBody上validate失败后抛出的异常是MethodArgumentNotValidException异常。
+    /**
+     * 参数检验错误 @RequestParam上validate失败后抛出的异常是javax.validation.ConstraintViolationException
+     *
+     * @param e ConstraintViolationException
+     * @return rest json
+     */
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     @ExceptionHandler
     public ResultVo<Object> handlerConstraintViolationException(final ConstraintViolationException e) {
-        log.error("Error:", e);
+        log.error(ERROR, e);
         String errorMessages = e.getConstraintViolations().stream().map(ConstraintViolation::getMessage).collect(Collectors.joining(";"));
-        return new ResultVo<>("A0400", String.valueOf(errorMessages), null);
+        return new ResultVo<>(PARAMS_ERROR, errorMessages, null);
     }
 
-    //参数检验错误 validate失败后抛出的异常是BindException异常。
+    /**
+     * 参数检验错误 validate失败后抛出的异常是BindException异常。
+     *
+     * @param e ConstraintViolationException
+     * @return rest json
+     */
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     @ExceptionHandler
     public ResultVo<Object> handlerConstraintViolationException(final BindException e) {
-        log.error("Error:", e);
+        log.error(ERROR, e);
         String errorMessages = e.getBindingResult().getAllErrors().stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(";"));
-        return new ResultVo<>("A0400", String.valueOf(errorMessages), null);
+        return new ResultVo<>(PARAMS_ERROR, errorMessages, null);
     }
 
+    /**
+     * 自定义异常捕获
+     *
+     * @param e CustomException
+     * @return rest json
+     */
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     @ExceptionHandler(CustomException.class)
     public ResultVo<String> testExceptionHandler(CustomException e) {
-        return new ResultVo<String>("B0001", "失败", e.getMsg());
+        return new ResultVo<>("B0001", "失败", e.getMsg());
     }
 }
