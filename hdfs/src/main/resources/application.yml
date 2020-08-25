@@ -16,3 +16,8 @@ logging:
   config:
     classpath: logback-spring.xml
 
+hdfs:
+  host: localhost
+  port: 9000
+  user:
+
