@@ -2,6 +2,7 @@ package top.rogermaster.common.common;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * @Author: Roger
@@ -10,6 +11,7 @@ import lombok.Data;
  */
 @Data
 @AllArgsConstructor
+@NoArgsConstructor
 public class ResultVo<T> {
     /**
      * 状态：1.成功，0：失败

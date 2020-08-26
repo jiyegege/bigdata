@@ -2,14 +2,14 @@ package top.rogermaster.hdfs.config;
 
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 
 /**
  * @Author: Roger
  * @description: hdfs配置
  * @date: 2020/8/25 11:24 下午
  */
-@Configuration
+@Component
 @Data
 public class HdfsConf {
     @Value("${hdfs.host}")

@@ -19,5 +19,7 @@ logging:
 hdfs:
   host: localhost
   port: 9000
-  user:
+  user: root
+server:
+  port: 8082
 

@@ -1,15 +1,20 @@
 package top.rogermaster.hdfs.utils;
 
+import com.google.gson.Gson;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.IOUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
+import top.rogermaster.common.exception.CustomException;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,19 +26,20 @@ import java.util.Map;
  * @date: 2020/8/25 11:09 下午
  */
 @Component
+@Slf4j
 public class HdfsUtil {
-    private static final int bufferSize = 1024 * 1024 * 64;
+    private static final int BUFFER_SIZE = 1024 * 1024 * 64;
     private static String HDFS_HOST;
-    private static String HDFS_USER;
+    private static FileSystem fileSystem;
 
     /**
      * 获取HDFS配置信息
      *
      * @return
      */
-    private static Configuration getConfiguration() {
+    private static Configuration getConfiguration(String host) {
         Configuration configuration = new Configuration();
-        configuration.set("fs.defaultFS", HDFS_HOST);
+        configuration.set("fs.defaultFS", host);
         return configuration;
     }
 
@@ -43,12 +49,45 @@ public class HdfsUtil {
      * @return
      * @throws Exception
      */
-    public static FileSystem getFileSystem() throws Exception {
+    public static FileSystem getFileSystem(String hosts, String user, String port) throws Exception {
         // 客户端去操作hdfs时是有一个用户身份的，默认情况下hdfs客户端api会从jvm中获取一个参数作为自己的用户身份
         // DHADOOP_USER_NAME=hadoop
         // 也可以在构造客户端fs对象时，通过参数传递进去
-        FileSystem fileSystem = FileSystem.get(new URI(HDFS_HOST), getConfiguration(), HDFS_USER);
-        return fileSystem;
+        FileSystem fileSystem = getActiveFileSystem(hosts, user, port);
+        if (fileSystem != null) {
+            HdfsUtil.fileSystem = fileSystem;
+            return fileSystem;
+        } else {
+            log.info("Hadoop节点状态未激活");
+            throw new CustomException("Hadoop节点状态未激活");
+        }
+    }
+
+    /**
+     * 获取激活状态的hadoop节点
+     *
+     * @param hosts 所有节点ip
+     * @param user  用户
+     * @param port  端口
+     * @return
+     * @throws IOException
+     * @throws InterruptedException
+     * @throws URISyntaxException
+     */
+    private static FileSystem getActiveFileSystem(String hosts, String user, String port) throws IOException, InterruptedException, URISyntaxException {
+        String[] hostArray = hosts.split(",");
+        for (String host : hostArray) {
+            String hdfsUrl = String.format("hdfs://%s:%s", host, port);
+            FileSystem fileSystem = FileSystem.get(new URI(hdfsUrl), getConfiguration(host), user);
+            if (fileSystem != null) {
+                boolean exists = fileSystem.exists(new Path("/"));
+                if (exists) {
+                    HDFS_HOST = hdfsUrl;
+                    return fileSystem;
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -65,11 +104,10 @@ public class HdfsUtil {
         if (existFile(path)) {
             return true;
         }
-        FileSystem fs = getFileSystem();
         // 目标路径
         Path srcPath = new Path(path);
-        boolean isOk = fs.mkdirs(srcPath);
-        fs.close();
+        boolean isOk = fileSystem.mkdirs(srcPath);
+        fileSystem.close();
         return isOk;
     }
 
@@ -84,9 +122,8 @@ public class HdfsUtil {
         if (StringUtils.isEmpty(path)) {
             return false;
         }
-        FileSystem fs = getFileSystem();
         Path srcPath = new Path(path);
-        boolean isExists = fs.exists(srcPath);
+        boolean isExists = fileSystem.exists(srcPath);
         return isExists;
     }
 
@@ -104,10 +141,9 @@ public class HdfsUtil {
         if (!existFile(path)) {
             return null;
         }
-        FileSystem fs = getFileSystem();
         // 目标路径
         Path newPath = new Path(path);
-        FileStatus[] statusList = fs.listStatus(newPath);
+        FileStatus[] statusList = fileSystem.listStatus(newPath);
         List<Map<String, Object>> list = new ArrayList<>();
         if (null != statusList && statusList.length > 0) {
             for (FileStatus fileStatus : statusList) {
@@ -134,14 +170,13 @@ public class HdfsUtil {
             return;
         }
         String fileName = file.getOriginalFilename();
-        FileSystem fs = getFileSystem();
+
         // 上传时默认当前目录，后面自动拼接文件的目录
         Path newPath = new Path(path + "/" + fileName);
         // 打开一个输出流
-        FSDataOutputStream outputStream = fs.create(newPath);
-        outputStream.write(file.getBytes());
-        outputStream.close();
-        fs.close();
+        try (FSDataOutputStream outputStream = fileSystem.create(newPath)) {
+            outputStream.write(file.getBytes());
+        }
     }
 
     /**
@@ -158,23 +193,20 @@ public class HdfsUtil {
         if (!existFile(path)) {
             return null;
         }
-        FileSystem fs = getFileSystem();
         // 目标路径
         Path srcPath = new Path(path);
-        FSDataInputStream inputStream = null;
-        try {
-            inputStream = fs.open(srcPath);
+
+        try (FSDataInputStream inputStream = fileSystem.open(srcPath)) {
             // 防止中文乱码
-            BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-            String lineTxt = "";
-            StringBuffer sb = new StringBuffer();
-            while ((lineTxt = reader.readLine()) != null) {
-                sb.append(lineTxt);
+            StringBuffer sb;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+                String lineTxt = "";
+                sb = new StringBuffer();
+                while ((lineTxt = reader.readLine()) != null) {
+                    sb.append(lineTxt);
+                }
             }
             return sb.toString();
-        } finally {
-            inputStream.close();
-            fs.close();
         }
     }
 
@@ -193,11 +225,10 @@ public class HdfsUtil {
             return null;
         }
 
-        FileSystem fs = getFileSystem();
         // 目标路径
         Path srcPath = new Path(path);
         // 递归找到所有文件
-        RemoteIterator<LocatedFileStatus> filesList = fs.listFiles(srcPath, true);
+        RemoteIterator<LocatedFileStatus> filesList = fileSystem.listFiles(srcPath, true);
         List<Map<String, String>> returnList = new ArrayList<>();
         while (filesList.hasNext()) {
             LocatedFileStatus next = filesList.next();
@@ -208,7 +239,6 @@ public class HdfsUtil {
             map.put("filePath", filePath.toString());
             returnList.add(map);
         }
-        fs.close();
         return returnList;
     }
 
@@ -224,13 +254,11 @@ public class HdfsUtil {
         if (StringUtils.isEmpty(oldName) || StringUtils.isEmpty(newName)) {
             return false;
         }
-        FileSystem fs = getFileSystem();
         // 原文件目标路径
         Path oldPath = new Path(oldName);
         // 重命名目标路径
         Path newPath = new Path(newName);
-        boolean isOk = fs.rename(oldPath, newPath);
-        fs.close();
+        boolean isOk = fileSystem.rename(oldPath, newPath);
         return isOk;
     }
 
@@ -248,10 +276,8 @@ public class HdfsUtil {
         if (!existFile(path)) {
             return false;
         }
-        FileSystem fs = getFileSystem();
         Path srcPath = new Path(path);
-        boolean isOk = fs.deleteOnExit(srcPath);
-        fs.close();
+        boolean isOk = fileSystem.deleteOnExit(srcPath);
         return isOk;
     }
 
@@ -266,15 +292,13 @@ public class HdfsUtil {
         if (StringUtils.isEmpty(path) || StringUtils.isEmpty(uploadPath)) {
             return;
         }
-        FileSystem fs = getFileSystem();
         // 上传路径
         Path clientPath = new Path(path);
         // 目标路径
         Path serverPath = new Path(uploadPath);
 
         // 调用文件系统的文件复制方法，第一个参数是否删除原文件true为删除，默认为false
-        fs.copyFromLocalFile(false, clientPath, serverPath);
-        fs.close();
+        fileSystem.copyFromLocalFile(false, clientPath, serverPath);
     }
 
     /**
@@ -289,15 +313,13 @@ public class HdfsUtil {
         if (StringUtils.isEmpty(path) || StringUtils.isEmpty(downloadPath)) {
             return;
         }
-        FileSystem fs = getFileSystem();
         // 上传路径
         Path clientPath = new Path(path);
         // 目标路径
         Path serverPath = new Path(downloadPath);
 
         // 调用文件系统的文件复制方法，第一个参数是否删除原文件true为删除，默认为false
-        fs.copyToLocalFile(false, clientPath, serverPath);
-        fs.close();
+        fileSystem.copyToLocalFile(false, clientPath, serverPath);
     }
 
     /**
@@ -311,23 +333,13 @@ public class HdfsUtil {
         if (StringUtils.isEmpty(sourcePath) || StringUtils.isEmpty(targetPath)) {
             return;
         }
-        FileSystem fs = getFileSystem();
         // 原始文件路径
         Path oldPath = new Path(sourcePath);
         // 目标路径
         Path newPath = new Path(targetPath);
-
-        FSDataInputStream inputStream = null;
-        FSDataOutputStream outputStream = null;
-        try {
-            inputStream = fs.open(oldPath);
-            outputStream = fs.create(newPath);
-
-            IOUtils.copyBytes(inputStream, outputStream, bufferSize, false);
-        } finally {
-            inputStream.close();
-            outputStream.close();
-            fs.close();
+        try (FSDataInputStream inputStream = fileSystem.open(oldPath);
+             FSDataOutputStream outputStream = fileSystem.create(newPath);) {
+            IOUtils.copyBytes(inputStream, outputStream, BUFFER_SIZE, false);
         }
     }
 
@@ -345,33 +357,30 @@ public class HdfsUtil {
         if (!existFile(path)) {
             return null;
         }
-        FileSystem fs = getFileSystem();
         // 目标路径
         Path srcPath = new Path(path);
-        try {
-            FSDataInputStream inputStream = fs.open(srcPath);
-            return IOUtils.readFullyToByteArray(inputStream);
-        } finally {
-            fs.close();
-        }
+        FSDataInputStream inputStream = fileSystem.open(srcPath);
+        return IOUtils.readFullyToByteArray(inputStream);
     }
 
-//    /**
-//     * 打开HDFS上的文件并返回java对象
-//     * @param path
-//     * @return
-//     * @throws Exception
-//     */
-//    public static <T extends Object> T openFileToObject(String path, Class<T> clazz) throws Exception {
-//        if (StringUtils.isEmpty(path)) {
-//            return null;
-//        }
-//        if (!existFile(path)) {
-//            return null;
-//        }
-//        String jsonStr = readFile(path);
-//        return JsonUtil.fromObject(jsonStr, clazz);
-//    }
+    /**
+     * 打开HDFS上的文件并返回java对象
+     *
+     * @param path
+     * @return
+     * @throws Exception
+     */
+    public static <T extends Object> T openFileToObject(String path, Class<T> clazz) throws Exception {
+        if (StringUtils.isEmpty(path)) {
+            return null;
+        }
+        if (!existFile(path)) {
+            return null;
+        }
+        String jsonStr = readFile(path);
+        Gson gson = new Gson();
+        return gson.fromJson(jsonStr, clazz);
+    }
 
     /**
      * 获取某个文件在HDFS的集群位置
@@ -387,10 +396,18 @@ public class HdfsUtil {
         if (!existFile(path)) {
             return null;
         }
-        FileSystem fs = getFileSystem();
         // 目标路径
         Path srcPath = new Path(path);
-        FileStatus fileStatus = fs.getFileStatus(srcPath);
-        return fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
+        FileStatus fileStatus = fileSystem.getFileStatus(srcPath);
+        return fileSystem.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
+    }
+
+    /**
+     * 关闭filesystem
+     *
+     * @throws IOException
+     */
+    public static void close() throws IOException {
+        fileSystem.close();
     }
 }
