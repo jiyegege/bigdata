@@ -8,7 +8,7 @@ import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.IOUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
-import top.rogermaster.common.exception.CustomException;
+import top.rogermaster.common.exception.CustomClientException;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -40,6 +40,7 @@ public class HdfsUtil {
     private static Configuration getConfiguration(String host) {
         Configuration configuration = new Configuration();
         configuration.set("fs.defaultFS", host);
+        configuration.set("dfs.replication", "1");
         return configuration;
     }
 
@@ -59,7 +60,7 @@ public class HdfsUtil {
             return fileSystem;
         } else {
             log.info("Hadoop节点状态未激活");
-            throw new CustomException("Hadoop节点状态未激活");
+            throw new CustomClientException("Hadoop节点状态未激活");
         }
     }
 

@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import top.rogermaster.common.common.ResultVo;
-import top.rogermaster.common.exception.CustomException;
+import top.rogermaster.common.exception.CustomClientException;
 
 import javax.validation.ConstraintViolation;
 import javax.validation.ConstraintViolationException;
@@ -78,9 +78,21 @@ public class ControllerAdvice {
      * @param e CustomException
      * @return rest json
      */
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    @ExceptionHandler(CustomClientException.class)
+    public ResultVo<String> handlerCustomException(CustomClientException e) {
+        return new ResultVo<>("A0001", "失败", e.getMsg());
+    }
+
+    /**
+     * 其他异常捕获
+     *
+     * @param e CustomException
+     * @return rest json
+     */
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    @ExceptionHandler(CustomException.class)
-    public ResultVo<String> testExceptionHandler(CustomException e) {
-        return new ResultVo<>("B0001", "失败", e.getMsg());
+    @ExceptionHandler
+    public ResultVo<String> handlerOtherException(Exception e) {
+        return new ResultVo<>("B0001", "失败", e.getMessage());
     }
 }

@@ -8,17 +8,17 @@ import lombok.Data;
  * @date: 2020/8/19 11:05 下午
  */
 @Data
-public class CustomException extends RuntimeException {
+public class CustomClientException extends RuntimeException {
     private Integer code;
     private String msg;
 
-    public CustomException(Integer code, String msg) {
+    public CustomClientException(Integer code, String msg) {
         super(msg);
         this.code = code;
         this.msg = msg;
     }
 
-    public CustomException(String msg) {
+    public CustomClientException(String msg) {
         this(111, msg);
     }
 }
