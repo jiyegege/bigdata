@@ -1,0 +1,12 @@
+spark:
+  app:
+    name: spark-sprint-boot
+  master:
+    uri: spark://127.0.0.1:7077
+server:
+  port: 8083
+hdfs:
+  host: localhost
+  port: 9000
+  user: root
+  cluster_name: ns1
